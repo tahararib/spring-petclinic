@@ -86,7 +86,7 @@ pipeline {
                     sh """
                         # Créer le répertoire des artefacts s'il n'existe pas
                         sh 'echo "ARTIFACTS_DIR=${ARTIFACTS_DIR}, deployEnv=${deployEnv}, APP_NAME=${APP_NAME}, version=${version}, BUILD_NUMBER=${BUILD_NUMBER}"'
-                        mkdir -p ${ARTIFACTS_DIR}/${deployEnv}
+                        sudo mkdir -p ${ARTIFACTS_DIR}/${deployEnv}
                         
                         # Copier le WAR avec un nom incluant la version
                         sudo cp target/${APP_NAME}.war ${ARTIFACTS_DIR}/${deployEnv}/${APP_NAME}-${version}-${BUILD_NUMBER}.war
