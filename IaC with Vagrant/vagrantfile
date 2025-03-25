@@ -1,0 +1,91 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+Vagrant.configure("2") do |config|
+  # Box commune pour toutes les VMs
+  config.vm.box = "bento/ubuntu-24.04"
+  
+  # Configuration SSH commune
+  config.ssh.insert_key = true
+  
+  # configuer un timeout plus long
+   config.vm.boot_timeout = 900
+   config.vm.graceful_halt_timeout = 240
+  
+  # Provisionnement commun pour toutes les machines
+  config.vm.provision "shell", path: "scripts/bootstrap.sh"
+
+  # Jenkins Master
+  config.vm.define "jenkins-master" do |jenkins|
+    jenkins.vm.hostname = "jenkins-master"
+    jenkins.vm.network "private_network", ip: "192.168.56.10"
+    jenkins.vm.network "forwarded_port", guest: 8080, host: 8080
+    
+    jenkins.vm.provider "virtualbox" do |vb|
+      vb.memory = "2048"
+      vb.cpus = 2
+      vb.name = "jenkins-master"
+    end
+    
+    jenkins.vm.provision "shell", path: "scripts/jenkins_master.sh"
+  end
+
+  # Jenkins Agent
+  config.vm.define "jenkins-agent" do |agent|
+    agent.vm.hostname = "jenkins-agent"
+    agent.vm.network "private_network", ip: "192.168.56.11"
+    
+    agent.vm.provider "virtualbox" do |vb|
+      vb.memory = "1024"
+      vb.cpus = 1
+      vb.name = "jenkins-agent"
+    end
+    
+    agent.vm.provision "shell", path: "scripts/jenkins_agent.sh"
+  end
+
+  # SonarQube
+  config.vm.define "sonarqube" do |sonar|
+    sonar.vm.hostname = "sonarqube"
+    sonar.vm.network "private_network", ip: "192.168.56.12"
+    sonar.vm.network "forwarded_port", guest: 9000, host: 9000
+    
+    sonar.vm.provider "virtualbox" do |vb|
+      vb.memory = "6144"  # SonarQube nécessite au moins 4 Go de RAM
+      vb.cpus = 2
+      vb.name = "sonarqube"
+    end
+    
+    sonar.vm.provision "shell", path: "scripts/sonarqube_install_final.sh"
+  end
+
+  # Tomcat
+  config.vm.define "tomcat" do |tomcat|
+    tomcat.vm.hostname = "tomcat"
+    tomcat.vm.network "private_network", ip: "192.168.56.13"
+    tomcat.vm.network "forwarded_port", guest: 8080, host: 8081
+    
+    tomcat.vm.provider "virtualbox" do |vb|
+      vb.memory = "2048"
+      vb.cpus = 1
+      vb.name = "tomcat"
+    end
+    
+    tomcat.vm.provision "shell", path: "scripts/tomcat_install_final.sh"
+  end
+
+  # MySQL
+  config.vm.define "mysql" do |mysql|
+    mysql.vm.hostname = "mysql"
+    mysql.vm.network "private_network", ip: "192.168.56.14"
+    mysql.vm.network "forwarded_port", guest: 3306, host: 3306
+    
+    mysql.vm.provider "virtualbox" do |vb|
+      vb.memory = "2048"
+      vb.cpus = 1
+      vb.name = "mysql"
+    end
+    
+    mysql.vm.provision "shell", path: "scripts/mysql_install.sh"
+  end
+end
