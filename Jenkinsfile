@@ -76,7 +76,7 @@ pipeline {
                     sh "chmod +x scripts/deploy.sh"
                     
                     // Exécuter le script de déploiement
-                    sh "./scripts/deploy.sh ${params.DEPLOY_ENV} target/${APP_NAME}.war"
+                    sh "./scripts/deploy.sh ${params.DEPLOY_ENV} target/${APP_NAME}*.war"
                     
                     // Archiver l'artefact avec version dans un répertoire centralisé
                     def version = sh(script: "grep -m 1 '<version>' pom.xml | sed -E 's/.*<version>(.*)<\\/version>.*/\\1/'", returnStdout: true).trim()
