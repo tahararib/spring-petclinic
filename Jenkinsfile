@@ -67,6 +67,15 @@ pipeline {
                 junit '**/target/surefire-reports/*.xml'
             }
         }
+        stage('Analysis with SonarQube') {
+            steps {
+                echo 'Run sonarQube Analysis'
+                withSonarQubeEnv(installationName : 'sonarServer' , credentialsId : 'token4sonar') 
+                {
+                    sh "mvn clean package sonar:sonar"
+                    }
+            }
+        }
         
         stage('Deploy') {
             steps {
