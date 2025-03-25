@@ -9,7 +9,7 @@ pipeline {
     
     environment {
         // Variables globales
-        TOMCAT_URL = "http://192.168.56.13:8080"
+        TOMCAT_URL = "https://192.168.56.13:8080"
         TOMCAT_USER = "deployer"
         TOMCAT_PASSWORD = "deployer"
         MYSQL_HOST = "192.168.56.14"
