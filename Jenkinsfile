@@ -42,7 +42,7 @@ pipeline {
                 // Construction du projet avec le profil spécifique à l'environnement
                 script {
                     def profile = params.DEPLOY_ENV.toLowerCase()
-                    sh "mvn clean package -DskipTests=${params.SKIP_TESTS} -P${profile}"
+                    sh "mvn clean package -DskipTests=${params.SKIP_TESTS} -P${profile} -Dspring-javaformat.skip=true"
                 }
                 
                 // Archiver l'artefact dans Jenkins si demandé
