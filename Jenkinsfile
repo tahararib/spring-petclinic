@@ -15,7 +15,7 @@ pipeline {
         MYSQL_HOST = "192.168.56.14"
         MYSQL_USER = "petclinic"
         MYSQL_PASSWORD = "petclinic"
-        APP_NAME = "petclinic"
+        APP_NAME = "spring-petclinic"
         
         // Répertoire pour les artefacts
         ARTIFACTS_DIR = "${JENKINS_HOME}/artifacts/${APP_NAME}"
