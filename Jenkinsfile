@@ -67,7 +67,39 @@ pipeline {
                 junit '**/target/surefire-reports/*.xml'
             }
         }
-        stage('Analysis with SonarQube') {
+         stage('Code Coverage') {
+            steps {
+                echo 'Code coverage Measurement'
+                sh'mvn jacoco:report'
+                // publication 
+                jacoco(
+                    execPattern: 'target/jacoco.exec',
+                    classPattern: 'target/classes',
+                    sourcePattern: 'src/main/java',
+                    exclusionPattern: 'src/test/**'
+                )
+                                 
+            }
+        }
+    stage('Code Analysis') {
+            steps {
+                // Exécution de Checkstyle
+                sh 'mvn checkstyle:checkstyle'
+                
+                // Exécution de SpotBugs
+                sh 'mvn spotbugs:spotbugs'
+                
+                // Publication des rapports d'analyse
+                recordIssues(
+                    tools: [
+                        checkStyle(pattern: 'target/checkstyle-result.xml'),
+                        spotBugs(pattern: 'target/spotbugsXml.xml')
+                    ]
+                )
+            }
+        }
+
+ stage('Analysis with SonarQube') {
             steps {
                 echo 'Run sonarQube Analysis'
                 withSonarQubeEnv(installationName : 'sonarServer' , credentialsId : 'token4sonar') 
@@ -92,17 +124,17 @@ pipeline {
                     def version = "3.4.0-SNAPSHOT"
                     def deployEnv = params.DEPLOY_ENV.toLowerCase()
                     
-                    sh """
-                        # Créer le répertoire des artefacts s'il n'existe pas
+                  //  sh """
+                  //      # Créer le répertoire des artefacts s'il n'existe pas
                        // sh 'echo "ARTIFACTS_DIR=${ARTIFACTS_DIR}, deployEnv=${deployEnv}, APP_NAME=${APP_NAME}, version=${version}, BUILD_NUMBER=${BUILD_NUMBER}"'
                         //sudo mkdir -p ${ARTIFACTS_DIR}/${deployEnv}
                         
-                        # Copier le WAR avec un nom incluant la version
+                      //  # Copier le WAR avec un nom incluant la version
                         //sudo cp target/${APP_NAME}.war ${ARTIFACTS_DIR}/${deployEnv}/${APP_NAME}-${version}-${BUILD_NUMBER}.war
                         
-                        # Créer un lien symbolique vers la dernière version
+                      //  # Créer un lien symbolique vers la dernière version
                        // ln -sf ${ARTIFACTS_DIR}/${deployEnv}/${APP_NAME}-${version}-${BUILD_NUMBER}.war ${ARTIFACTS_DIR}/${deployEnv}/${APP_NAME}-latest.war
-                    """
+                  //  """
                     
                 }
             }
