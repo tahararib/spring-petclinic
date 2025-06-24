@@ -36,7 +36,7 @@
     <libsass.version>0.2.29</libsass.version>
     <lifecycle-mapping>1.0.0</lifecycle-mapping>
     <maven-checkstyle.version>3.6.0</maven-checkstyle.version>
-    <nohttp-checkstyle.version>0.0.11</nohttp-checkstyle.version>
+    <!-- nohttp-checkstyle.version>0.0.11</nohttp-checkstyle.version -->
     <spring-format.version>0.0.43</spring-format.version>
 
   </properties>
