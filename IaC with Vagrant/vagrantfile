@@ -4,6 +4,7 @@
 Vagrant.configure("2") do |config|
   # Box commune pour toutes les VMs
   config.vm.box = "bento/ubuntu-24.04"
+  config.vm.box_architecture = "amd64"
   
   # Configuration SSH commune
   config.ssh.insert_key = true
