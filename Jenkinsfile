@@ -4,7 +4,7 @@ pipeline {
     parameters {
         choice(name: 'DEPLOY_ENV', choices: ['STAGING', 'PROD'], description: 'Choisir l\'environnement de déploiement')
         booleanParam(name: 'SKIP_TESTS', defaultValue: false, description: 'Ignorer les tests')
-        booleanParam(name: 'ARCHIVE_ARTIFACT', defaultValue: false, description: 'Archiver l\'artefact après le build')
+        booleanParam(name: 'ARCHIVE_ARTIFACT', defaultValue: true, description: 'Archiver l\'artefact après le build')
     }
     
     environment {
