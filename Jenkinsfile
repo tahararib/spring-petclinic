@@ -10,8 +10,8 @@ pipeline {
     environment {
         // Variables globales
         TOMCAT_URL = "https://192.168.56.13:8080"
-        TOMCAT_USER = "deployer"
-        TOMCAT_PASSWORD = "deployer"
+        TOMCAT_USER = "admin"
+        TOMCAT_PASSWORD = "admin"
         MYSQL_HOST = "192.168.56.14"
         MYSQL_USER = "petclinic"
         MYSQL_PASSWORD = "petclinic"
@@ -23,7 +23,7 @@ pipeline {
     
     tools {
         jdk "localJDK"
-        maven "localMaven"
+        maven "localMAVEN"
     }
     
     stages {
