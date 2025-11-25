@@ -68,6 +68,10 @@ pipeline {
             }
         }
          stage('Code Coverage') {
+             steps {
+                // tes commandes shell ou appels d’outils ici
+                sh 'mvn clean test jacoco:report'
+                  }
             post {
               always {
                 step([$class: 'JacocoPublisher',
