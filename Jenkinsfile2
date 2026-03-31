@@ -426,7 +426,7 @@ pipeline {
         // tomcat9() : pour Tomcat 9.x
         // tomcat8() : pour Tomcat 8.x
         // contextPath : /spring-petclinic
-        //   → accessible sur http://192.168.56.13:8080/spring-petclinic
+        //   → accessible sur https://192.168.56.13:8080/spring-petclinic
         // ============================================================
             when {
                 allOf {
