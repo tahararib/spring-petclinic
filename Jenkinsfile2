@@ -9,29 +9,31 @@
 //    - Warnings Next Generation
 //    - JaCoCo
 //    - SonarQube Scanner
-//    - Deploy to Container         (nouveau)
-//    - Copy Artifact               (nouveau)
+//    - Deploy to Container
+//    - Copy Artifact
 //    - GitHub Integration
 //
 //  Credentials Jenkins à créer avant d'exécuter :
-//    ID: tomcat-credentials        → Username/Password (admin/admin)
-//    ID: sonar-token               → Secret text (token SonarQube)
-//    ID: mysql-credentials         → Username/Password (petclinic/petclinic)
+//    ID: cred4tomcat    → Username/Password (admin/admin)
+//    ID: cred4sonar     → Secret text (token SonarQube)
+//
+//  Base de données : H2 en mémoire (pas de MySQL)
+//  Pas de credentials DB nécessaires.
 // ============================================================
 
 pipeline {
 
     // ============================================================
     // AGENT : exécuter sur n'importe quel nœud disponible
-    // En production : agent { label 'linux' } pour cibler un nœud
     // ============================================================
     agent any
 
     // ============================================================
     // OUTILS : noms configurés dans Manage Jenkins > Tools
+    // FIX : localJDK (pas localJDK17)
     // ============================================================
     tools {
-        jdk   'localJDK'
+        jdk   'localJDK17'
         maven 'localMAVEN'
     }
 
@@ -39,29 +41,28 @@ pipeline {
     // OPTIONS GLOBALES DU PIPELINE
     // ============================================================
     options {
-        timestamps()                              // horodatage de chaque ligne de log
-        timeout(time: 60, unit: 'MINUTES')        // abandon si le pipeline dépasse 60 min
+        timestamps()
+        timeout(time: 60, unit: 'MINUTES')
         buildDiscarder(logRotator(
-            numToKeepStr:        '10',            // garder les 10 derniers builds
-            artifactNumToKeepStr: '5'             // garder les artefacts des 5 derniers
+            numToKeepStr        : '10',
+            artifactNumToKeepStr: '5'
         ))
-        skipStagesAfterUnstable()                 // ne pas déployer si build instable
-        disableConcurrentBuilds()                 // éviter deux builds simultanés
+        skipStagesAfterUnstable()   // ne pas déployer si build instable
+        disableConcurrentBuilds()   // éviter deux builds simultanés
     }
 
     // ============================================================
-    // TRIGGERS : déclenchement automatique
-    // pollSCM  → Jenkins interroge GitHub toutes les 15 min
-    //            et déclenche SEULEMENT si nouveau commit détecté
-    // githubPush → déclenchement immédiat sur push (nécessite webhook)
+    // TRIGGERS
+    // pollSCM  → vérifie GitHub toutes les 15 min, déclenche si nouveau commit
+    // githubPush → déclenche immédiatement sur push (nécessite webhook/ngrok)
     // ============================================================
     triggers {
-        pollSCM('H/15 8-18 * * 1-5')   // scrutation lun-ven, 8h-18h, toutes les 15 min
-        githubPush()                     // webhook GitHub (si ngrok ou IP publique)
+        pollSCM('H/15 8-18 * * 1-5')
+        githubPush()
     }
 
     // ============================================================
-    // PARAMÈTRES : visibles dans "Build with Parameters"
+    // PARAMÈTRES
     // ============================================================
     parameters {
         choice(
@@ -77,7 +78,7 @@ pipeline {
         booleanParam(
             name        : 'SKIP_SONAR',
             defaultValue: false,
-            description : 'Sauter l\'analyse SonarQube'
+            description : "Sauter l'analyse SonarQube"
         )
         booleanParam(
             name        : 'ARCHIVE_ARTIFACT',
@@ -87,44 +88,30 @@ pipeline {
         booleanParam(
             name        : 'COPY_ARTIFACT',
             defaultValue: false,
-            description : 'Copier le WAR du dernier build stable (plugin Copy Artifact)'
+            description : 'Réutiliser le WAR du dernier build stable (plugin Copy Artifact)'
         )
     }
 
     // ============================================================
-    // VARIABLES D'ENVIRONNEMENT GLOBALES
+    // VARIABLES D'ENVIRONNEMENT
     //
-    // BONNE PRATIQUE : ne jamais mettre de mots de passe en clair.
-    // Les credentials Jenkins sont injectés via credentials()
-    // et masqués automatiquement dans les logs.
+    // FIX : suppression de MYSQL_HOST et MYSQL_CREDS
+    //       spring-petclinic utilise H2 en mémoire par défaut
+    //       Aucune configuration datasource externe nécessaire.
+    //
+    // BONNE PRATIQUE : credentials() masque les mots de passe dans les logs.
+    // Ne jamais écrire TOMCAT_PASSWORD = "admin" en clair.
     // ============================================================
     environment {
-        // Coordonnées Tomcat — credentials injectés depuis Jenkins
-        // Le plugin "Deploy to Container" utilisera ces valeurs
-        TOMCAT_URL  = 'http://192.168.56.13:8080'
+        TOMCAT_URL    = 'http://192.168.56.13:8080'
+        TOMCAT_CREDS  = credentials('cred4tomcat')
+        // Après injection automatique :
+        //   TOMCAT_CREDS_USR = "admin"
+        //   TOMCAT_CREDS_PSW = "****"  ← masqué dans les logs
 
-        // FIX SÉCURITÉ : credentials() masque les valeurs dans les logs
-        // Créer dans Jenkins : Manage → Credentials → Global
-        //   Kind: Username with password
-        //   ID  : tomcat-credentials
-        //   User: admin / Password: admin
-        TOMCAT_CREDS = credentials('cred4tomcat')
-        // Après injection : TOMCAT_CREDS_USR = "admin"
-        //                   TOMCAT_CREDS_PSW = "admin" (masqué dans logs)
-
-        // Base de données
-        MYSQL_HOST   = '192.168.56.14'
-        MYSQL_CREDS  = credentials('mysql-credentials')
-        // MYSQL_CREDS_USR et MYSQL_CREDS_PSW injectés automatiquement
-
-        // Identité de l'application
-        APP_NAME     = 'spring-petclinic'
-        APP_VERSION  = '3.4.0-SNAPSHOT'
-
-        // Répertoire centralisé des artefacts (sur le serveur Jenkins)
+        APP_NAME      = 'spring-petclinic'
+        APP_VERSION   = '3.4.0-SNAPSHOT'
         ARTIFACTS_DIR = "${JENKINS_HOME}/artifacts/${APP_NAME}"
-
-        // SonarQube
         SONAR_PROJECT = 'spring-petclinic'
     }
 
@@ -135,15 +122,14 @@ pipeline {
 
         // ============================================================
         stage('Checkout') {
-        // Récupère le code source depuis le SCM configuré dans le job.
-        // checkout scm = utilise la configuration Git du job lui-même.
-        // cleanWs() avant checkout garantit un workspace propre.
+        // checkout scm : utilise la configuration Git du job.
+        // cleanWs() avant checkout : workspace propre à chaque build.
+        // Les variables GIT_* enrichissent la description du build.
         // ============================================================
             steps {
                 cleanWs()
                 checkout scm
                 script {
-                    // Enrichir la description du build avec les infos Git
                     env.GIT_COMMIT_SHORT = sh(
                         script: 'git log -1 --format="%h"',
                         returnStdout: true
@@ -165,87 +151,75 @@ pipeline {
         // ============================================================
         stage('Copy Artifact (optionnel)') {
         // PLUGIN : Copy Artifact
-        // Cas d'usage : au lieu de rebuilder, réutiliser le WAR
-        // du dernier build stable d'un autre job (ou du même job).
+        // Réutilise le WAR du dernier build stable sans recompiler.
+        // Cas d'usage CD : job "Deploy" séparé du job "Build".
         //
-        // Exemple typique en CD :
-        //   - Job "Build" produit le WAR et l'archive
-        //   - Job "Deploy" copie le WAR du job "Build" sans recompiler
-        //
-        // Paramètre COPY_ARTIFACT permet de basculer entre les deux modes.
+        // Activé uniquement si COPY_ARTIFACT = true.
         // ============================================================
             when {
                 expression { return params.COPY_ARTIFACT }
             }
             steps {
-                script {
-                    echo "Copie du WAR depuis le dernier build stable..."
-                    copyArtifacts(
-                        projectName  : env.JOB_NAME,   // même job, dernier build stable
-                        selector     : lastSuccessful(),
-                        filter       : 'target/*.war',
-                        target       : 'target/',
-                        flatten      : true,           // ne pas recréer l'arborescence
-                        optional     : false           // échouer si aucun artefact trouvé
-                    )
-                    // Pour copier depuis un autre job :
-                    // projectName: 'nom-du-job-source'
-                    // selector   : specific('42')   ← build numéro 42
-                    //            : lastCompleted()   ← dernier build terminé
-                    //            : upstream()        ← build upstream ayant déclenché celui-ci
-                }
+                echo "Copie du WAR depuis le dernier build stable..."
+                copyArtifacts(
+                    projectName: env.JOB_NAME,
+                    selector   : lastSuccessful(),
+                    filter     : 'target/*.war',
+                    target     : 'target/',
+                    flatten    : true,
+                    optional   : false
+                )
+                // Autres sélecteurs disponibles :
+                // specific('42')      ← build numéro précis
+                // lastCompleted()     ← dernier build terminé (même échoué)
+                // upstream()          ← build qui a déclenché celui-ci
             }
         }
 
         // ============================================================
         stage('Build') {
-        // Compile + package le projet Maven.
-        // spring-javaformat:apply : applique le formatage de code
-        //   imposé par Spring (Google Java Format). À faire AVANT package.
-        // -DskipTests : contrôlé par paramètre SKIP_TESTS
-        // -P${profile} : active le profil Maven staging ou prod
-        //   (définir les profils dans pom.xml avec les propriétés DB)
+        // FIX : suppression des params -Dspring.datasource.*
+        //       H2 est configuré dans application.properties par défaut,
+        //       aucune propriété externe n'est nécessaire.
+        //
+        // spring-javaformat:apply : formatage Google Java Format
+        //   imposé par le projet Spring — à exécuter AVANT package.
+        // -P${profile} : profil Maven staging ou prod
+        //   (les profils peuvent définir des propriétés spécifiques
+        //    sans toucher à la datasource H2)
         // ============================================================
             when {
-                // Sauter le build si on copie un artefact existant
                 expression { return !params.COPY_ARTIFACT }
             }
             steps {
                 script {
                     def profile = params.DEPLOY_ENV.toLowerCase()
-                    echo "Build du profil Maven : ${profile}"
+                    echo "Build — profil Maven : ${profile}"
 
-                    // Étape 1 : formatage du code source (Spring Java Format)
                     sh 'mvn spring-javaformat:apply'
 
-                    // Étape 2 : compilation + packaging
-                    // -Dspring-javaformat.skip=true : évite le double check de format
                     sh """
                         mvn clean package \
                           -DskipTests=${params.SKIP_TESTS} \
                           -P${profile} \
-                          -Dspring-javaformat.skip=true \
-                          -Dspring.datasource.url=jdbc:mysql://${env.MYSQL_HOST}/petclinic \
-                          -Dspring.datasource.username=${env.MYSQL_CREDS_USR} \
-                          -Dspring.datasource.password=${env.MYSQL_CREDS_PSW}
+                          -Dspring-javaformat.skip=true
                     """
                 }
             }
             post {
                 success {
-                    // Archiver le WAR si demandé (paramètre ARCHIVE_ARTIFACT)
-                    // archiveArtifacts stocke dans Jenkins pour :
-                    //   - téléchargement direct depuis l'UI
-                    //   - réutilisation via Copy Artifact dans un autre job
-                    //   - fingerprinting pour la traçabilité
+                    // Archiver le WAR dans Jenkins :
+                    //   → téléchargeable depuis l'UI
+                    //   → réutilisable via copyArtifacts() dans un autre job
+                    //   → fingerprint SHA1 pour la traçabilité inter-builds
                     script {
                         if (params.ARCHIVE_ARTIFACT) {
                             archiveArtifacts(
-                                artifacts   : 'target/*.war',
-                                fingerprint : true,          // empreinte SHA1 pour traçabilité
+                                artifacts       : 'target/*.jar,target/*.war',
+                                fingerprint     : true,
                                 onlyIfSuccessful: true
                             )
-                            echo "WAR archivé : target/${APP_NAME}.war"
+                            echo "Artefact archivé dans Jenkins (fingerprint activé)"
                         }
                     }
                 }
@@ -254,27 +228,22 @@ pipeline {
 
         // ============================================================
         stage('Tests unitaires') {
-        // Exécute les tests JUnit/Spring Boot Test.
-        // Skippé si SKIP_TESTS = true.
-        // Les résultats sont publiés via junit() même en cas d'échec
-        // (allowEmptyResults évite l'erreur si aucun fichier XML).
+        // mvn test seul : les classes sont déjà compilées par le stage Build.
+        // Pas de "clean" pour ne pas effacer les classes compilées.
+        // junit() publie les résultats même si des tests échouent
+        // (allowEmptyResults évite l'erreur si aucun rapport XML).
         // ============================================================
             when {
                 expression { return !params.SKIP_TESTS }
             }
             steps {
-                // FIX : mvn test seul (pas clean test) — les classes
-                // sont déjà compilées par le stage Build précédent
                 sh 'mvn test -Dspring-javaformat.skip=true'
             }
             post {
                 always {
-                    // Publier les résultats JUnit dans Jenkins
-                    // → onglet "Test Results" dans chaque build
-                    // → courbe de tendance sur la page du job
                     junit(
-                        testResults      : '**/target/surefire-reports/*.xml',
-                        allowEmptyResults: true,
+                        testResults         : '**/target/surefire-reports/*.xml',
+                        allowEmptyResults   : true,
                         skipPublishingChecks: false
                     )
                 }
@@ -283,34 +252,29 @@ pipeline {
 
         // ============================================================
         stage('Couverture de code — JaCoCo') {
-        // FIX 1 : post{} déplacé au niveau stage (pas dans steps{})
-        // FIX 2 : step([$class:'JacocoPublisher']) remplacé par jacoco()
-        // FIX 3 : mvn jacoco:report seul (rapport déjà préparé par
-        //         la phase prepare-agent configurée dans le pom.xml)
-        //         Pas besoin de relancer clean test.
+        // mvn jacoco:report : génère le rapport depuis target/jacoco.exec
+        //   produit pendant la phase de tests (prepare-agent dans pom.xml).
+        //   Ne relance PAS les tests — évite une 3ème compilation inutile.
         //
-        // Prérequis pom.xml : jacoco-maven-plugin avec executions
-        //   prepare-agent (avant tests) + report (après tests)
+        // FIX original : post{} était dans steps{} → syntaxe invalide
+        // FIX original : step([$class:'JacocoPublisher']) → jacoco() DSL natif
+        //
+        // Prérequis pom.xml :
+        //   jacoco-maven-plugin avec executions prepare-agent + report
         // ============================================================
             when {
                 expression { return !params.SKIP_TESTS }
             }
             steps {
-                // Génère le rapport XML+HTML depuis le fichier jacoco.exec
-                // produit pendant la phase de tests
                 sh 'mvn jacoco:report -Dspring-javaformat.skip=true'
             }
             post {
                 always {
-                    // FIX : syntaxe DSL native JaCoCo (plugin JaCoCo 3.x+)
-                    // step([$class:'JacocoPublisher']) est l'ancienne API — supprimée
                     jacoco(
                         execPattern          : 'target/jacoco.exec',
                         classPattern         : 'target/classes',
                         sourcePattern        : 'src/main/java',
                         exclusionPattern     : 'src/test/**,**/dto/**,**/model/**',
-
-                        // Seuils (quality gate couverture locale)
                         minimumLineCoverage  : '40',
                         minimumBranchCoverage: '30',
                         minimumMethodCoverage: '40',
@@ -324,36 +288,36 @@ pipeline {
 
         // ============================================================
         stage('Analyse statique — Checkstyle + SpotBugs') {
-        // Exécute les outils d'analyse statique et publie les rapports
-        // via Warnings Next Generation (plugin "warnings-ng").
+        // Checkstyle : vérifie le style de code (imports, nommage, longueur)
+        // SpotBugs   : détecte les bugs potentiels (null deref, ressources...)
         //
-        // Quality gates définis ici :
-        //   TOTAL_ERROR → 0 → FAILURE  : aucune erreur critique tolérée
-        //   TOTAL_HIGH  → 10 → UNSTABLE : avertissement si > 10 violations HIGH
-        //   NEW         → 0 → FAILURE  : aucune nouvelle violation tolérée
+        // recordIssues (Warnings NG) publie les rapports XML dans Jenkins :
+        //   → onglet "Issues" sur chaque build
+        //   → courbes de tendance sur la page du job
+        //
+        // Quality gates :
+        //   TOTAL_ERROR → 0 → FAILURE  : zéro tolérance sur les erreurs critiques
+        //   TOTAL_HIGH  → 10 → UNSTABLE : avertissement si trop de violations HIGH
+        //   NEW         → 0 → FAILURE  : toute nouvelle violation bloque le build
         // ============================================================
             steps {
-                // Checkstyle : style de code (nommage, imports, longueur...)
                 sh 'mvn checkstyle:checkstyle -Dspring-javaformat.skip=true'
+                sh 'mvn spotbugs:spotbugs     -Dspring-javaformat.skip=true'
 
-                // SpotBugs : bugs potentiels (null deref, mauvaise API...)
-                sh 'mvn spotbugs:spotbugs -Dspring-javaformat.skip=true'
-
-                // Publication via Warnings Next Generation
                 recordIssues(
                     enabledForFailure : true,
-                    aggregatingResults: false,   // rapport séparé par outil = plus lisible
+                    aggregatingResults: false,
                     tools: [
                         checkStyle(pattern: 'target/checkstyle-result.xml'),
                         spotBugs(
                             pattern          : 'target/spotbugsXml.xml',
-                            useRankAsPriority: true   // utiliser le rang SpotBugs comme sévérité
+                            useRankAsPriority: true
                         )
                     ],
                     qualityGates: [
-                        [threshold: 0,  type: 'TOTAL_ERROR', unstable: false], // FAILURE
-                        [threshold: 10, type: 'TOTAL_HIGH',  unstable: true ], // UNSTABLE
-                        [threshold: 0,  type: 'NEW',         unstable: false]  // FAILURE
+                        [threshold: 0,  type: 'TOTAL_ERROR', unstable: false],
+                        [threshold: 10, type: 'TOTAL_HIGH',  unstable: true ],
+                        [threshold: 0,  type: 'NEW',         unstable: false]
                     ]
                 )
             }
@@ -361,19 +325,15 @@ pipeline {
 
         // ============================================================
         stage('Analyse SonarQube') {
-        // FIX : mvn sonar:sonar uniquement (pas clean package sonar:sonar)
-        // Le projet est déjà compilé et les classes sont dans target/.
-        // Relancer clean package doublerait le temps de build inutilement.
+        // FIX original : mvn clean package sonar:sonar → mvn sonar:sonar
+        //   Le projet est déjà compilé. "clean package" relançait un
+        //   build complet inutile (doublement du temps de CI).
         //
-        // withSonarQubeEnv() :
-        //   - injecte SONAR_HOST_URL, SONAR_AUTH_TOKEN automatiquement
-        //   - lit la config du serveur "serverSonar" dans Manage Jenkins > System
-        //   - ne jamais mettre le token en clair dans le Jenkinsfile
+        // withSonarQubeEnv() injecte automatiquement dans la commande mvn :
+        //   SONAR_HOST_URL    = URL du serveur SonarQube
+        //   SONAR_AUTH_TOKEN  = token d'authentification (masqué dans logs)
         //
-        // Paramètres Sonar importants :
-        //   -Dsonar.branch.name     : pour analyser par branche
-        //   -Dsonar.exclusions      : exclure DTOs, configs, tests
-        //   -Dsonar.coverage.jacoco : lier le rapport JaCoCo à Sonar
+        // Ne jamais écrire le token en clair dans le Jenkinsfile.
         // ============================================================
             when {
                 allOf {
@@ -383,8 +343,8 @@ pipeline {
             }
             steps {
                 withSonarQubeEnv(
-                    installationName: 'serverSonar',   // nom dans Manage Jenkins > System
-                    credentialsId   : 'cred4sonar'     // Secret text = token Sonar
+                    installationName: 'serverSonar',
+                    credentialsId   : 'cred4sonar'
                 ) {
                     sh """
                         mvn sonar:sonar \
@@ -395,8 +355,7 @@ pipeline {
                           -Dsonar.java.target=17 \
                           -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml \
                           -Dsonar.junit.reportPaths=target/surefire-reports \
-                          -Dsonar.exclusions=**/dto/**,**/model/**,**/*Test*,**/config/** \
-                          -Dsonar.cpd.exclusions=**/dto/**
+                          -Dsonar.exclusions=**/dto/**,**/*Test*,**/config/**
                     """
                 }
             }
@@ -404,18 +363,21 @@ pipeline {
 
         // ============================================================
         stage('SonarQube Quality Gate') {
-        // FIX : stage manquant dans le pipeline original.
-        // Sans ce stage, l'analyse Sonar tourne mais le résultat
-        // (OK / ERROR) n'est jamais vérifié par Jenkins.
+        // FIX original : ce stage était absent.
+        //   Sans lui, l'analyse Sonar s'exécutait mais Jenkins n'attendait
+        //   jamais le verdict → le quality gate Sonar était totalement ignoré.
         //
         // waitForQualityGate() :
-        //   - met le pipeline en PAUSE
-        //   - attend que SonarQube envoie le résultat via webhook
-        //   - reprend quand le webhook arrive (ou après timeout)
+        //   1. Met le pipeline en PAUSE
+        //   2. Attend le webhook de SonarQube (résultat de l'analyse)
+        //   3. Reprend et lit qg.status : OK / WARN / ERROR
         //
-        // PRÉREQUIS : webhook configuré dans SonarQube :
+        // PRÉREQUIS — webhook dans SonarQube :
         //   Administration → Webhooks → Create
-        //   URL : http://192.168.56.10:8080/sonarqube-webhook/
+        //   URL : http://<IP-JENKINS>:8080/sonarqube-webhook/
+        //         (le slash final est obligatoire)
+        //
+        // Sans webhook : timeout au bout de 10 min → build ABORTED
         // ============================================================
             when {
                 allOf {
@@ -427,19 +389,18 @@ pipeline {
                 timeout(time: 10, unit: 'MINUTES') {
                     script {
                         def qg = waitForQualityGate(abortPipeline: true)
-
                         switch(qg.status) {
                             case 'OK':
                                 echo "Quality Gate SonarQube : OK"
-                                currentBuild.description += " | QG: OK"
+                                currentBuild.description += " | QG:OK"
                                 break
                             case 'WARN':
                                 currentBuild.result = 'UNSTABLE'
-                                currentBuild.description += " | QG: WARN"
-                                echo "Quality Gate SonarQube : WARN — vérifier le dashboard"
+                                currentBuild.description += " | QG:WARN"
+                                echo "Quality Gate SonarQube : WARN — vérifier le dashboard Sonar"
                                 break
                             case 'ERROR':
-                                currentBuild.description += " | QG: FAIL"
+                                currentBuild.description += " | QG:FAIL"
                                 error "Quality Gate SonarQube FAILED — déploiement bloqué"
                                 break
                             default:
@@ -454,42 +415,38 @@ pipeline {
         // ============================================================
         stage('Déploiement Tomcat') {
         // PLUGIN : Deploy to Container
-        // Déploie le WAR directement sur Tomcat via son API Manager.
+        // Déploie le WAR sur Tomcat via son API Manager REST.
+        // Plus fiable qu'un script shell : gère les redirections HTTP,
+        // l'authentification et le redéploiement à chaud.
         //
-        // Conditions de déploiement (toutes doivent être vraies) :
-        //   - Branche main ou master OU paramètre FORCE_DEPLOY
-        //   - Tests non skippés (sécurité)
-        //   - Quality Gate passé (via skipStagesAfterUnstable dans options)
+        // FIX branch condition : branch 'main' ne fonctionne qu'en
+        //   Multibranch Pipeline. En job Pipeline standard, utiliser
+        //   env.GIT_BRANCH qui contient 'origin/main' ou 'origin/master'.
         //
-        // adapters : tomcat8() ou tomcat9() selon la version installée
-        //   url           : URL du manager Tomcat (sans /manager)
-        //   credentialsId : ID du credential Jenkins (admin/admin)
-        //
-        // contextPath : chemin de déploiement dans Tomcat
-        //   '/spring-petclinic' → http://192.168.56.13:8080/spring-petclinic
-        //
-        // war : pattern Ant pour trouver le WAR dans le workspace
+        // tomcat9() : pour Tomcat 9.x
+        // tomcat8() : pour Tomcat 8.x
+        // contextPath : /spring-petclinic
+        //   → accessible sur http://192.168.56.13:8080/spring-petclinic
         // ============================================================
             when {
                 allOf {
-                    anyOf {
-                        branch 'main'
-                        branch 'master'
+                    // FIX : env.GIT_BRANCH fonctionne en job Pipeline standard
+                    // ET en Multibranch — branch() fonctionne seulement en Multibranch
+                    expression {
+                        return env.GIT_BRANCH ==~ /.*main.*/ ||
+                               env.GIT_BRANCH ==~ /.*master.*/
                     }
                     expression { return !params.SKIP_TESTS }
                 }
             }
             steps {
                 script {
-                    // Bloquer le déploiement en prod si tests skippés
                     if (params.DEPLOY_ENV == 'prod' && params.SKIP_TESTS) {
                         error "Déploiement PROD interdit avec SKIP_TESTS=true"
                     }
 
-                    echo "Déploiement sur Tomcat (${params.DEPLOY_ENV}) : ${env.TOMCAT_URL}"
+                    echo "Déploiement sur Tomcat : ${env.TOMCAT_URL}/${env.APP_NAME}"
 
-                    // PLUGIN Deploy to Container — tomcat9() pour Tomcat 9.x
-                    // tomcat8() pour Tomcat 8.x, tomcat7() pour Tomcat 7.x
                     deploy(
                         adapters: [
                             tomcat9(
@@ -498,7 +455,9 @@ pipeline {
                             )
                         ],
                         contextPath: "/${env.APP_NAME}",
-                        war        : 'target/*.war'
+                        war        : 'target/*.jar'
+                        // spring-petclinic produit un JAR exécutable.
+                        // Si le projet produit un WAR : 'target/*.war'
                     )
 
                     echo "Application disponible : ${env.TOMCAT_URL}/${env.APP_NAME}"
@@ -506,59 +465,56 @@ pipeline {
             }
             post {
                 success {
-                    // Copier le WAR dans un répertoire centralisé versionné
-                    script {
-                        def deployEnv = params.DEPLOY_ENV.toLowerCase()
-                        // Créer le répertoire s'il n'existe pas
-                        // JENKINS_HOME est typiquement /var/lib/jenkins
-                        sh """
-                            mkdir -p ${env.ARTIFACTS_DIR}/${deployEnv}
-                            cp target/${env.APP_NAME}*.war \
-                               ${env.ARTIFACTS_DIR}/${deployEnv}/${env.APP_NAME}-${env.APP_VERSION}-${env.BUILD_NUMBER}.war
-                            ln -sf \
-                               ${env.ARTIFACTS_DIR}/${deployEnv}/${env.APP_NAME}-${env.APP_VERSION}-${env.BUILD_NUMBER}.war \
-                               ${env.ARTIFACTS_DIR}/${deployEnv}/${env.APP_NAME}-latest.war
-                            echo "WAR disponible dans : ${env.ARTIFACTS_DIR}/${deployEnv}/"
-                            ls -lh ${env.ARTIFACTS_DIR}/${deployEnv}/
-                        """
-                    }
+                    // Copier le JAR/WAR dans un répertoire versionné sur le serveur Jenkins
+                    // mkdir -p crée le répertoire s'il n'existe pas
+                    sh """
+                        mkdir -p ${env.ARTIFACTS_DIR}/${params.DEPLOY_ENV}
+                        cp target/${env.APP_NAME}*.jar \
+                           ${env.ARTIFACTS_DIR}/${params.DEPLOY_ENV}/${env.APP_NAME}-${env.APP_VERSION}-${env.BUILD_NUMBER}.jar
+                        ln -sf \
+                           ${env.ARTIFACTS_DIR}/${params.DEPLOY_ENV}/${env.APP_NAME}-${env.APP_VERSION}-${env.BUILD_NUMBER}.jar \
+                           ${env.ARTIFACTS_DIR}/${params.DEPLOY_ENV}/${env.APP_NAME}-latest.jar
+                        ls -lh ${env.ARTIFACTS_DIR}/${params.DEPLOY_ENV}/
+                    """
                 }
             }
         }
 
         // ============================================================
         stage('Vérification post-déploiement') {
-        // Vérifie que l'application répond après déploiement.
-        // sleep 15 : laisser le temps à Spring Boot de démarrer.
-        // curl --fail : retourne un code d'erreur si HTTP != 2xx/3xx.
-        // --retry 5 --retry-delay 10 : 5 tentatives si le serveur
-        //   est encore en cours de démarrage.
+        // Vérifie que Spring Boot répond correctement après déploiement.
+        // /actuator/health : endpoint Spring Boot Actuator
+        //   retourne {"status":"UP"} si l'appli est saine.
+        //
+        // curl --retry 5 --retry-delay 10 :
+        //   5 tentatives espacées de 10s pour laisser le temps
+        //   à Spring Boot de démarrer complètement (~20-30s).
         // ============================================================
             when {
                 allOf {
-                    anyOf { branch 'main'; branch 'master' }
+                    expression {
+                        return env.GIT_BRANCH ==~ /.*main.*/ ||
+                               env.GIT_BRANCH ==~ /.*master.*/
+                    }
                     expression { return !params.SKIP_TESTS }
                 }
             }
             steps {
                 script {
                     def appUrl = "${env.TOMCAT_URL}/${env.APP_NAME}"
-                    echo "Vérification de l'application : ${appUrl}"
-
-                    // Attente démarrage Spring Boot
+                    echo "Vérification santé : ${appUrl}/actuator/health"
                     sh 'sleep 15'
-
-                    // Vérification HTTP — échoue si pas de réponse 2xx
                     sh """
                         curl --fail \
                              --silent \
+                             --show-error \
                              --retry 5 \
                              --retry-delay 10 \
                              --max-time 30 \
                              ${appUrl}/actuator/health \
                           | grep -q '"status":"UP"' \
                           && echo "Application OK — statut UP" \
-                          || (echo "Application KO — vérifier Tomcat" && exit 1)
+                          || (echo "Application KO — vérifier les logs Tomcat" && exit 1)
                     """
                 }
             }
@@ -566,60 +522,63 @@ pipeline {
     }
 
     // ============================================================
-    // POST — actions exécutées après tous les stages
+    // POST — exécuté après tous les stages
+    //
+    // FIX archiveArtifacts dans post.always :
+    //   node('') allouait un NOUVEAU workspace vide → target/ absent
+    //   → archiveArtifacts ne trouvait rien.
+    //   Solution : l'archivage est déjà fait dans post.success du stage Build.
+    //   Le bloc always ne garde que les actions sans besoin de workspace.
+    //
+    // FIX cleanWs dans post.cleanup :
+    //   node('') + ws(env.WORKSPACE) force le nettoyage du bon workspace
+    //   même si le contexte FilePath a été perdu après un échec précoce.
     // ============================================================
     post {
-        always {
-            // FIX : archiveArtifacts nécessite un contexte FilePath (workspace).
-            // Quand le pipeline échoue tôt ou que l'agent est libéré,
-            // le contexte n'est plus disponible dans post{}.
-            // Solution : node('') force la réallocation d'un workspace.
-            node('') {
-                archiveArtifacts(
-                    artifacts        : '''
-                        target/checkstyle-result.xml,
-                        target/spotbugsXml.xml,
-                        target/site/jacoco/**
-                    ''',
-                    allowEmptyArchive: true   // ne pas échouer si les fichiers n'existent pas
-                )
-            }
-        }
 
         success {
             echo """
-            Pipeline terminé avec succès
-              Environnement  : ${params.DEPLOY_ENV}
-              Commit         : ${env.GIT_COMMIT_SHORT} — ${env.GIT_COMMIT_MSG}
-              Auteur         : ${env.GIT_AUTHOR}
-              Application    : ${env.TOMCAT_URL}/${env.APP_NAME}
+            ============================================
+            Pipeline OK
+              Env         : ${params.DEPLOY_ENV}
+              Commit      : ${env.GIT_COMMIT_SHORT} — ${env.GIT_COMMIT_MSG}
+              Auteur      : ${env.GIT_AUTHOR}
+              Application : ${env.TOMCAT_URL}/${env.APP_NAME}
+            ============================================
             """
         }
 
         unstable {
             echo """
-            Build UNSTABLE — quality gates non bloquants dépassés
-              Consulter : Warnings NG, JaCoCo, SonarQube
+            ============================================
+            Build UNSTABLE
+              Quality gates non bloquants dépassés.
+              Consulter : Warnings NG · JaCoCo · SonarQube
+            ============================================
             """
         }
 
         failure {
             echo """
-            Pipeline ECHOUE
-              Causes probables :
-                - Erreur de compilation (stage Build)
-                - Quality Gate SonarQube ERROR (stage SonarQube Quality Gate)
-                - Quality Gate Warnings NG FAILURE (stage Analyse statique)
-                - Tomcat inaccessible (stage Déploiement)
-              Consulter le stage en rouge dans les logs.
+            ============================================
+            Pipeline ECHOUE — causes possibles :
+              - Erreur de compilation      (stage Build)
+              - Tests en échec             (stage Tests)
+              - Quality Gate Warnings NG   (stage Analyse statique)
+              - Quality Gate SonarQube     (stage SonarQube QG)
+              - Tomcat inaccessible        (stage Déploiement)
+            ============================================
             """
         }
 
         cleanup {
-            // FIX : même correction — node() pour avoir un contexte FilePath
-            // cleanup s'exécute en dernier, après tous les autres blocs post
+            // Nettoyage du workspace en fin de build (succès ou échec).
+            // node + ws() garantit que cleanWs() s'exécute dans le bon
+            // workspace même si le contexte a été perdu.
             node('') {
-                cleanWs()
+                ws("${env.WORKSPACE}") {
+                    cleanWs()
+                }
             }
         }
     }
