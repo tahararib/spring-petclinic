@@ -1,6 +1,6 @@
 // ============================================================
 //  PIPELINE DÉCLARATIF — spring-petclinic
-//  Version pédagogique complète — 
+//  Version pédagogique complète — CapabilityForge
 //
 //  Plugins requis :
 //    - Pipeline                    (installé par défaut)
@@ -108,7 +108,7 @@ pipeline {
         //   Kind: Username with password
         //   ID  : tomcat-credentials
         //   User: admin / Password: admin
-        TOMCAT_CREDS = credentials('tomcat-credentials')
+        TOMCAT_CREDS = credentials('cred4tomcat')
         // Après injection : TOMCAT_CREDS_USR = "admin"
         //                   TOMCAT_CREDS_PSW = "admin" (masqué dans logs)
 
@@ -494,7 +494,7 @@ pipeline {
                         adapters: [
                             tomcat9(
                                 url          : env.TOMCAT_URL,
-                                credentialsId: 'tomcat-credentials'
+                                credentialsId: 'cred4tomcat'
                             )
                         ],
                         contextPath: "/${env.APP_NAME}",
@@ -509,6 +509,8 @@ pipeline {
                     // Copier le WAR dans un répertoire centralisé versionné
                     script {
                         def deployEnv = params.DEPLOY_ENV.toLowerCase()
+                        // Créer le répertoire s'il n'existe pas
+                        // JENKINS_HOME est typiquement /var/lib/jenkins
                         sh """
                             mkdir -p ${env.ARTIFACTS_DIR}/${deployEnv}
                             cp target/${env.APP_NAME}*.war \
@@ -516,8 +518,9 @@ pipeline {
                             ln -sf \
                                ${env.ARTIFACTS_DIR}/${deployEnv}/${env.APP_NAME}-${env.APP_VERSION}-${env.BUILD_NUMBER}.war \
                                ${env.ARTIFACTS_DIR}/${deployEnv}/${env.APP_NAME}-latest.war
+                            echo "WAR disponible dans : ${env.ARTIFACTS_DIR}/${deployEnv}/"
+                            ls -lh ${env.ARTIFACTS_DIR}/${deployEnv}/
                         """
-                        echo "WAR versionné archivé dans ${env.ARTIFACTS_DIR}/${deployEnv}"
                     }
                 }
             }
@@ -564,24 +567,28 @@ pipeline {
 
     // ============================================================
     // POST — actions exécutées après tous les stages
-    // Ordre d'évaluation : always → (success|failure|unstable) → cleanup
     // ============================================================
     post {
         always {
-            // Archiver les rapports XML pour consultation ultérieure
-            archiveArtifacts(
-                artifacts        : '''
-                    target/checkstyle-result.xml,
-                    target/spotbugsXml.xml,
-                    target/site/jacoco/**
-                ''',
-                allowEmptyArchive: true
-            )
+            // FIX : archiveArtifacts nécessite un contexte FilePath (workspace).
+            // Quand le pipeline échoue tôt ou que l'agent est libéré,
+            // le contexte n'est plus disponible dans post{}.
+            // Solution : node('') force la réallocation d'un workspace.
+            node('') {
+                archiveArtifacts(
+                    artifacts        : '''
+                        target/checkstyle-result.xml,
+                        target/spotbugsXml.xml,
+                        target/site/jacoco/**
+                    ''',
+                    allowEmptyArchive: true   // ne pas échouer si les fichiers n'existent pas
+                )
+            }
         }
 
         success {
             echo """
-            ✓ Pipeline terminé avec succès
+            Pipeline terminé avec succès
               Environnement  : ${params.DEPLOY_ENV}
               Commit         : ${env.GIT_COMMIT_SHORT} — ${env.GIT_COMMIT_MSG}
               Auteur         : ${env.GIT_AUTHOR}
@@ -591,27 +598,29 @@ pipeline {
 
         unstable {
             echo """
-            ⚠ Build UNSTABLE — quality gates non bloquants dépassés
+            Build UNSTABLE — quality gates non bloquants dépassés
               Consulter : Warnings NG, JaCoCo, SonarQube
             """
         }
 
         failure {
             echo """
-            ✗ Pipeline ÉCHOUÉ
-              Cause probable :
-                - Erreur de compilation
-                - Quality Gate SonarQube (ERROR)
-                - Quality Gate Warnings NG (FAILURE)
-                - Déploiement Tomcat inaccessible
-              Consulter les logs du stage en rouge.
+            Pipeline ECHOUE
+              Causes probables :
+                - Erreur de compilation (stage Build)
+                - Quality Gate SonarQube ERROR (stage SonarQube Quality Gate)
+                - Quality Gate Warnings NG FAILURE (stage Analyse statique)
+                - Tomcat inaccessible (stage Déploiement)
+              Consulter le stage en rouge dans les logs.
             """
         }
 
         cleanup {
-            // Nettoyage du workspace après chaque build
-            // cleanWs() supprime tous les fichiers du workspace
-            cleanWs()
+            // FIX : même correction — node() pour avoir un contexte FilePath
+            // cleanup s'exécute en dernier, après tous les autres blocs post
+            node('') {
+                cleanWs()
+            }
         }
     }
 }
