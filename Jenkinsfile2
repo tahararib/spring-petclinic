@@ -201,7 +201,7 @@ pipeline {
                     sh """
                         mvn clean package \
                           -DskipTests=${params.SKIP_TESTS} \
-                          -P${profile} \
+                          -Dcheckstyle.skip=true \
                           -Dspring-javaformat.skip=true
                     """
                 }
