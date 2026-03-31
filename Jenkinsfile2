@@ -343,7 +343,7 @@ pipeline {
             }
             steps {
                 withSonarQubeEnv(
-                    installationName: 'serverSonar',
+                    installationName: 'sonarServer',
                     credentialsId   : 'cred4sonar'
                 ) {
                     sh """
