@@ -33,7 +33,7 @@ pipeline {
     // FIX : localJDK (pas localJDK17)
     // ============================================================
     tools {
-        jdk   'localJDK17'
+        jdk   'localJDK'
         maven 'localMAVEN'
     }
 
