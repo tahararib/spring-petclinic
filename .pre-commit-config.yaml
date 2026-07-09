@@ -1,0 +1,27 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-json
+      - id: check-added-large-files
+        args: ['--maxkb=1000']
+      - id: detect-private-key
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.18.4
+    hooks:
+      - id: gitleaks
+        name: Detect hardcoded secrets (gitleaks)
+
+  - repo: local
+    hooks:
+      - id: no-debug-code
+        name: No debug/TODO left in code
+        entry: grep -rn "System.out.println\|TODO\|FIXME\|HACK"
+        language: system
+        files: \.java$
+        pass_filenames: false
+        args: ['src/main/java']
