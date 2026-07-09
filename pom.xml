@@ -188,17 +188,6 @@
       <groupId>io.opentelemetry</groupId>
       <artifactId>opentelemetry-exporter-otlp</artifactId>
     </dependency>
-
-    <!-- ============================================================ -->
-    <!-- FORMATION UNIQUEMENT - CVE-2021-44228 (Log4Shell) CRITIQUE   -->
-    <!-- NE JAMAIS MERGER CETTE BRANCHE SUR MAIN                      -->
-    <!-- Utilisé en Lab 10 pour démontrer la détection Trivy           -->
-    <!-- ============================================================ -->
-    <dependency>
-      <groupId>org.apache.logging.log4j</groupId>
-      <artifactId>log4j-core</artifactId>
-      <version>2.14.1</version>
-    </dependency>
   </dependencies>
 
   <build>
