@@ -17,18 +17,17 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 @ActiveProfiles("postgres")
 public abstract class PostgresIntegrationTest {
 
-    @Container
-    static PostgreSQLContainer<?> postgres =
-        new PostgreSQLContainer<>("postgres:16-alpine")
-            .withDatabaseName("petclinic")
-            .withUsername("petclinic")
-            .withPassword("petclinic");
+	@Container
+	static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine")
+		.withDatabaseName("petclinic")
+		.withUsername("petclinic")
+		.withPassword("petclinic");
 
-    @DynamicPropertySource
-    static void configureProperties(DynamicPropertyRegistry registry) {
-        registry.add("spring.datasource.url", postgres::getJdbcUrl);
-        registry.add("spring.datasource.username", postgres::getUsername);
-        registry.add("spring.datasource.password", postgres::getPassword);
-    }
+	@DynamicPropertySource
+	static void configureProperties(DynamicPropertyRegistry registry) {
+		registry.add("spring.datasource.url", postgres::getJdbcUrl);
+		registry.add("spring.datasource.username", postgres::getUsername);
+		registry.add("spring.datasource.password", postgres::getPassword);
+	}
 
 }
