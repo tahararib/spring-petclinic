@@ -35,7 +35,7 @@ spec:
           env.IMAGE_TAG = sh(returnStdout: true, script: 'git rev-parse --short HEAD').trim()
           echo "Image tag : ${env.IMAGE_TAG}"
         }
-        sh './mvnw spring-javaformat:apply -q'
+        sh 'chmod +x mvnw && ./mvnw spring-javaformat:apply -q'
         sh './mvnw clean package -DskipTests -q'
         sh './mvnw test -Dtest="!OwnerRepositoryIntegrationTest,!PostgresIntegrationTest,!PostgresIntegrationTests,!MySqlIntegrationTests"'
       }
