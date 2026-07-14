@@ -1,12 +1,35 @@
 pipeline {
-  agent none
+  agent {
+    kubernetes {
+      label 'java-dind'
+      yaml """
+apiVersion: v1
+kind: Pod
+spec:
+  containers:
+  - name: jnlp
+    image: jenkins/inbound-agent:latest-jdk21
+    env:
+    - name: DOCKER_HOST
+      value: tcp://localhost:2375
+  - name: dind
+    image: docker:27-dind
+    securityContext:
+      privileged: true
+    env:
+    - name: DOCKER_TLS_CERTDIR
+      value: ""
+    - name: DOCKER_DRIVER
+      value: overlay2
+"""
+    }
+  }
   environment {
     REGISTRY = 'registry.k3d.localhost:5000'
     IMAGE    = 'spring-petclinic'
   }
   stages {
     stage('Build & Unit Tests') {
-      agent { label 'java' }
       steps {
         script {
           env.IMAGE_TAG = sh(returnStdout: true, script: 'git rev-parse --short HEAD').trim()
@@ -19,19 +42,20 @@ pipeline {
       post { always { junit 'target/surefire-reports/*.xml' } }
     }
     stage('Coverage') {
-      agent { label 'java' }
       steps { sh './mvnw jacoco:report' }
       post { always { jacoco execPattern: 'target/jacoco.exec' } }
     }
     stage('Build & Push Image') {
-      agent { label 'java' }
       steps {
-        sh "docker build -t ${REGISTRY}/${IMAGE}:${env.IMAGE_TAG} ."
-        sh "docker push ${REGISTRY}/${IMAGE}:${env.IMAGE_TAG}"
+        sh """
+          docker build \
+            --add-host registry.k3d.localhost:\$(getent hosts host.docker.internal | awk '{print \$1}' || echo 172.17.0.1) \
+            -t ${REGISTRY}/${IMAGE}:${env.IMAGE_TAG} .
+          docker push ${REGISTRY}/${IMAGE}:${env.IMAGE_TAG}
+        """
       }
     }
     stage('Deploy Staging') {
-      agent { label 'java' }
       steps {
         sh """
           helm upgrade --install petclinic-staging \
