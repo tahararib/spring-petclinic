@@ -43,13 +43,17 @@ spec:
   }
   stages {
     stage('Build & Unit Tests') {
-      steps {
-        sh './mvnw spring-javaformat:apply -q'
-        sh './mvnw clean package -DskipTests -q'
-        sh './mvnw test'
-      }
-      post { always { junit 'target/surefire-reports/*.xml' } }
-    }
+		steps {
+			script {
+				env.IMAGE_TAG = sh(returnStdout: true,
+				script: 'git rev-parse --short=7 HEAD').trim()
+				}
+			sh './mvnw spring-javaformat:apply -q'
+			sh './mvnw clean package -DskipTests -q'
+			sh './mvnw test'
+		}
+		post { always { junit 'target/surefire-reports/*.xml' } }
+		}
     stage('Coverage') {
       steps { sh './mvnw jacoco:report' }
       post { always { jacoco execPattern: 'target/jacoco.exec' } }
