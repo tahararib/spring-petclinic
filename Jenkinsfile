@@ -9,12 +9,19 @@ spec:
     - ip: "172.19.0.7"
       hostnames:
         - "registry.k3d.localhost"
+  volumes:
+    - name: maven-cache
+      persistentVolumeClaim:
+        claimName: maven-cache-pvc
   containers:
   - name: jnlp
     image: jenkins/inbound-agent:latest-jdk21
     env:
     - name: DOCKER_HOST
       value: tcp://localhost:2375
+    volumeMounts:
+    - name: maven-cache
+      mountPath: /root/.m2
   - name: dind
     image: docker:27-dind
     securityContext:
@@ -52,6 +59,7 @@ spec:
       steps {
         container('dind') {
           sh """
+            chmod +x mvnw
             docker build \
               -t ${REGISTRY}/${IMAGE}:${env.IMAGE_TAG} \
               -t ${REGISTRY}/${IMAGE}:latest .
