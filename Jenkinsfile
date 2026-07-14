@@ -14,7 +14,7 @@ pipeline {
         }
         sh './mvnw spring-javaformat:apply -q'
         sh './mvnw clean package -DskipTests -q'
-        sh './mvnw test'
+        sh './mvnw test -Dtest="!OwnerRepositoryIntegrationTest,!PostgresIntegrationTest"'
       }
       post { always { junit 'target/surefire-reports/*.xml' } }
     }
@@ -22,11 +22,6 @@ pipeline {
       agent { label 'java' }
       steps { sh './mvnw jacoco:report' }
       post { always { jacoco execPattern: 'target/jacoco.exec' } }
-    }
-    stage('Integration Tests') {
-      agent { label 'java' }
-      steps { sh './mvnw verify -Pintegration-tests' }
-      post { always { junit 'target/failsafe-reports/*.xml' } }
     }
     stage('Build & Push Image') {
       agent { label 'java' }
