@@ -10,7 +10,7 @@ RUN ./mvnw dependency:go-offline -q 2>/dev/null || true
 
 # Copier les sources et compiler
 COPY src/ src/
-RUN ./mvnw spring-javaformat:apply -q && ./mvnw clean package -DskipTests -q
+RUN chmod +x mvnw && ./mvnw spring-javaformat:apply -q && ./mvnw clean package -DskipTests -q
 
 # ── Stage 2 : Runtime ────────────────────────────
 FROM eclipse-temurin:21-jre-alpine AS runtime
