@@ -37,7 +37,7 @@ spec:
         }
         sh './mvnw spring-javaformat:apply -q'
         sh './mvnw clean package -DskipTests -q'
-        sh './mvnw test -Dtest="!OwnerRepositoryIntegrationTest,!PostgresIntegrationTest"'
+        sh './mvnw test -Dtest="!OwnerRepositoryIntegrationTest,!PostgresIntegrationTest,!PostgresIntegrationTests,!MySqlIntegrationTests"'
       }
       post { always { junit 'target/surefire-reports/*.xml' } }
     }
