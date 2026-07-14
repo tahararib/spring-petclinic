@@ -1,11 +1,14 @@
 pipeline {
   agent {
     kubernetes {
-      label 'java-dind'
       yaml """
 apiVersion: v1
 kind: Pod
 spec:
+  hostAliases:
+    - ip: "172.19.0.7"
+      hostnames:
+        - "registry.k3d.localhost"
   containers:
   - name: jnlp
     image: jenkins/inbound-agent:latest-jdk21
@@ -47,12 +50,15 @@ spec:
     }
     stage('Build & Push Image') {
       steps {
-        sh """
-          docker build \
-            --add-host registry.k3d.localhost:\$(getent hosts host.docker.internal | awk '{print \$1}' || echo 172.17.0.1) \
-            -t ${REGISTRY}/${IMAGE}:${env.IMAGE_TAG} .
-          docker push ${REGISTRY}/${IMAGE}:${env.IMAGE_TAG}
-        """
+        container('dind') {
+          sh """
+            docker build \
+              -t ${REGISTRY}/${IMAGE}:${env.IMAGE_TAG} \
+              -t ${REGISTRY}/${IMAGE}:latest .
+            docker push ${REGISTRY}/${IMAGE}:${env.IMAGE_TAG}
+            docker push ${REGISTRY}/${IMAGE}:latest
+          """
+        }
       }
     }
     stage('Deploy Staging') {
