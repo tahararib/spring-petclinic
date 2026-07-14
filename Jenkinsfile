@@ -40,7 +40,6 @@ spec:
   environment {
     REGISTRY  = 'registry.k3d.localhost:5000'
     IMAGE     = 'spring-petclinic'
-    IMAGE_TAG = "${env.GIT_COMMIT?.take(7) ?: 'dev'}"
   }
   stages {
     stage('Build & Unit Tests') {
@@ -62,8 +61,8 @@ spec:
     stage('Build & Push Image') {
       steps {
         container('dind') {
-          sh "docker build -f Dockerfile.ci -t ${REGISTRY}/${IMAGE}:${IMAGE_TAG} ."
-          sh "docker push ${REGISTRY}/${IMAGE}:${IMAGE_TAG}"
+          sh "docker build -f Dockerfile.ci -t ${REGISTRY}/${IMAGE}:${env.IMAGE_TAG} ."
+          sh "docker push ${REGISTRY}/${IMAGE}:${env.IMAGE_TAG}"
         }
       }
     }
@@ -74,18 +73,19 @@ spec:
           git clone --depth 1 https://github.com/tahararib/spring-petclinic-infra.git infra
         '''
         container('helm') {
-          sh """
-            helm upgrade --install petclinic-staging infra/helm/spring-petclinic \\
-              -n staging --create-namespace \\
-              -f infra/helm/spring-petclinic/values-staging.yaml \\
-              --set app.image.tag=\${env.IMAGE_TAG} --wait --timeout 5m
-          """
+          sh '''
+            helm upgrade --install petclinic-staging infra/helm/spring-petclinic \
+              -n staging --create-namespace \
+              -f infra/helm/spring-petclinic/values-staging.yaml \
+              --set app.image.tag=${IMAGE_TAG} \
+              --wait --timeout 5m
+          '''
         }
       }
     }
   }
   post {
     failure { echo 'Pipeline echoue — consulter les logs de stage' }
-    success { echo "Deploye : ${REGISTRY}/${IMAGE}:${IMAGE_TAG}" }
+    success { echo "Deploye : ${REGISTRY}/${IMAGE}:${env.IMAGE_TAG}" }
   }
 }
