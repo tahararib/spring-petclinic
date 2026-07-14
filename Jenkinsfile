@@ -69,12 +69,16 @@ spec:
     }
     stage('Deploy Staging') {
       steps {
+        sh '''
+          rm -rf infra
+          git clone --depth 1 https://github.com/tahararib/spring-petclinic-infra.git infra
+        '''
         container('helm') {
           sh """
-            helm upgrade --install petclinic-staging ./helm/spring-petclinic \
-              -n staging --create-namespace \
-              -f helm/spring-petclinic/values-staging.yaml \
-              --set app.image.tag=${IMAGE_TAG} --wait
+            helm upgrade --install petclinic-staging infra/helm/spring-petclinic \\
+              -n staging --create-namespace \\
+              -f infra/helm/spring-petclinic/values-staging.yaml \\
+              --set app.image.tag=\${env.IMAGE_TAG} --wait --timeout 5m
           """
         }
       }
