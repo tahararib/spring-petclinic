@@ -17,6 +17,8 @@
   <name>petclinic</name>
 
   <properties>
+    <tomcat.version>10.1.55</tomcat.version>
+    <thymeleaf.version>3.1.5.RELEASE</thymeleaf.version>
 
     <!-- Generic properties -->
     <java.version>21</java.version>
