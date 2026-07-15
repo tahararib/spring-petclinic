@@ -58,6 +58,19 @@ spec:
       steps { sh './mvnw jacoco:report' }
       post { always { jacoco execPattern: 'target/jacoco.exec' } }
     }
+
+    stage('SonarQube Analysis') {
+      steps {
+        withSonarQubeEnv('sonar-server') {
+          sh \'\'\'./mvnw sonar:sonar \
+            -Dsonar.projectKey=spring-petclinic \
+            -Dsonar.host.url=http://sonarqube.sonarqube.svc.cluster.local:9000\'\'\'
+        }
+        timeout(time: 5, unit: 'MINUTES') {
+          waitForQualityGate abortPipeline: true
+        }
+      }
+    }
     stage('Integration Tests') {
       steps { sh './mvnw verify -Pintegration-tests' }
       post { always { junit 'target/failsafe-reports/*.xml' } }
