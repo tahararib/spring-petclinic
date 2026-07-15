@@ -31,8 +31,18 @@ spec:
     image: alpine/helm:3.16.2
     command: ["cat"]
     tty: true
+  - name: trivy
+    image: aquasec/trivy:0.58.1
+    command: ["cat"]
+    tty: true
+    env:
+    - name: DOCKER_HOST
+      value: tcp://localhost:2375
+    volumeMounts:
+    - {name: trivy-cache, mountPath: /root/.cache/trivy}
   volumes:
   - {name: dind-storage, emptyDir: {}}
+  - {name: trivy-cache, persistentVolumeClaim: {claimName: jenkins-trivy-cache}}
 '''
     }
   }
@@ -82,22 +92,20 @@ stage('SonarQube Analysis') {
       }
     }
 
-    stage('Trivy Security Scan') {
+    stage('Scan Image — Trivy') {
       steps {
-        container('dind') {
+        container('trivy') {
           sh '''
-            trivy image \
-              --exit-code 1 \
-              --severity CRITICAL \
-              --format json \
-              --output trivy-report.json \
-              registry.k3d.localhost:5000/spring-petclinic:$(git rev-parse --short=7 HEAD)
+            trivy image --exit-code 1 --severity CRITICAL \
+              --format json --output trivy-report.json \
+              registry.k3d.localhost:5000/spring-petclinic:${IMAGE_TAG}
           '''
         }
       }
       post {
         always {
           archiveArtifacts artifacts: 'trivy-report.json', allowEmptyArchive: true
+          recordIssues tools: [trivy(pattern: 'trivy-report.json')]
         }
       }
     }
