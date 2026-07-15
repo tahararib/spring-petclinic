@@ -8,4 +8,5 @@
 	<suppress files="build[\\/].*" checks=".*"/>
 	<suppress files="target[\\/].*" checks=".*"/>
 	<suppress files=".+\.(jar|git|ico|p12|gif|jks|jpg|svg|log)" checks="NoHttp"/>
+        <suppress files="Jenkinsfile" checks="NoHttp"/>
 </suppressions>
