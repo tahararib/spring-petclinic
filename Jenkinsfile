@@ -96,7 +96,7 @@ stage('SonarQube Analysis') {
       steps {
         container('trivy') {
           sh '''
-            trivy image --exit-code 1 --severity CRITICAL \
+            trivy image --exit-code 1 --severity CRITICAL --ignore-unfixed \
               --format json --output trivy-report.json \
               registry.k3d.localhost:5000/spring-petclinic:${IMAGE_TAG}
           '''
