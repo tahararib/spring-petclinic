@@ -81,6 +81,26 @@ stage('SonarQube Analysis') {
         }
       }
     }
+
+    stage('Trivy Security Scan') {
+      steps {
+        container('dind') {
+          sh '''
+            trivy image \
+              --exit-code 1 \
+              --severity CRITICAL \
+              --format json \
+              --output trivy-report.json \
+              registry.k3d.localhost:5000/spring-petclinic:$(git rev-parse --short=7 HEAD)
+          '''
+        }
+      }
+      post {
+        always {
+          archiveArtifacts artifacts: 'trivy-report.json', allowEmptyArchive: true
+        }
+      }
+    }
     stage('Deploy Staging') {
       steps {
         sh '''
