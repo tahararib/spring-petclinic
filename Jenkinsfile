@@ -62,7 +62,7 @@ spec:
 stage('SonarQube Analysis') {
       steps {
         withSonarQubeEnv('sonar-server') {
-          sh './mvnw sonar:sonar -Dsonar.projectKey=spring-petclinic -Dsonar.host.url=http://sonarqube.sonarqube.svc.cluster.local:9000'
+          sh "./mvnw sonar:sonar -Dsonar.projectKey=spring-petclinic -Dsonar.host.url=${SONAR_HOST}"
         }
         timeout(time: 5, unit: 'MINUTES') {
           waitForQualityGate abortPipeline: true
