@@ -31,44 +31,34 @@ spec:
     image: alpine/helm:3.16.2
     command: ["cat"]
     tty: true
-  - name: trivy
-    image: aquasec/trivy:0.58.1
-    command: ["cat"]
-    tty: true
-    env:
-    - name: DOCKER_HOST
-      value: tcp://localhost:2375
-    volumeMounts:
-    - {name: trivy-cache, mountPath: /root/.cache/trivy}
   volumes:
   - {name: dind-storage, emptyDir: {}}
-  - {name: trivy-cache, persistentVolumeClaim: {claimName: jenkins-trivy-cache}}
 '''
     }
   }
   options { timeout(time: 30, unit: 'MINUTES') }
   environment {
-    REGISTRY  = 'registry.k3d.localhost:5000'
-    IMAGE     = 'spring-petclinic'
+    REGISTRY = 'registry.k3d.localhost:5000'
+    IMAGE    = 'spring-petclinic'
   }
   stages {
     stage('Build & Unit Tests') {
-		steps {
-			script {
-				env.IMAGE_TAG = sh(returnStdout: true,
-				script: 'git rev-parse --short=7 HEAD').trim()
-				}
-			sh './mvnw spring-javaformat:apply -q'
-			sh './mvnw clean package -DskipTests -q'
-			sh './mvnw test'
-		}
-		post { always { junit 'target/surefire-reports/*.xml' } }
-		}
+      steps {
+        script {
+          env.IMAGE_TAG = sh(returnStdout: true,
+              script: 'git rev-parse --short=7 HEAD').trim()
+          echo "Image tag : ${env.IMAGE_TAG}"
+        }
+        sh 'chmod +x mvnw && ./mvnw spring-javaformat:apply -q'
+        sh './mvnw clean package -DskipTests -q'
+        sh './mvnw test'
+      }
+      post { always { junit 'target/surefire-reports/*.xml' } }
+    }
     stage('Coverage') {
       steps { sh './mvnw jacoco:report' }
       post { always { jacoco execPattern: 'target/jacoco.exec' } }
     }
-
     stage('Integration Tests') {
       steps { sh './mvnw verify -Pintegration-tests' }
       post { always { junit 'target/failsafe-reports/*.xml' } }
@@ -81,7 +71,6 @@ spec:
         }
       }
     }
-
     stage('Deploy Staging') {
       steps {
         sh '''
@@ -90,6 +79,7 @@ spec:
         '''
         container('helm') {
           sh '''
+            IMAGE_TAG=$(git rev-parse --short=7 HEAD)
             helm upgrade --install petclinic-staging infra/helm/spring-petclinic \
               -n staging --create-namespace \
               -f infra/helm/spring-petclinic/values-staging.yaml \
