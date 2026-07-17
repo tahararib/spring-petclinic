@@ -45,9 +45,13 @@ spec:
     stage('Build & Unit Tests') {
       steps {
         script {
-          env.IMAGE_TAG = sh(returnStdout: true,
-              script: 'git rev-parse --short=7 HEAD').trim()
-          echo "Image tag : ${env.IMAGE_TAG}"
+env.IMAGE_TAG = sh(returnStdout: true,
+    script: '''
+      git config --global --add safe.directory \
+        /home/jenkins/agent/workspace/spring-petclinic
+      git rev-parse --short=7 HEAD
+    ''').trim()
+  echo "Image tag : ${env.IMAGE_TAG}"
         }
         sh 'chmod +x mvnw && ./mvnw spring-javaformat:apply -q'
         sh './mvnw clean package -DskipTests -q'
